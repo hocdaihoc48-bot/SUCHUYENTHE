@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Mô phỏng Vật lý - Đã căn chỉnh gọn gàng</title>
+<style>
+  /* --- GIỮ NGUYÊN CÁC PHẦN CƠ BẢN --- */
+  :root { --solid-color: #3498db; --liquid-color: #e74c3c; --gas-color: #9b59b6; --bg-color: #121212; --panel-bg: #1e1e1e; }
+  body { font-family: 'Segoe UI', sans-serif; background-color: var(--bg-color); color: white; display: flex; flex-direction: column; margin: 0; height: 100vh; overflow: hidden; }
+  #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity 0.5s; }
+  #start-btn { padding: 20px 40px; font-size: 1.5rem; background: #27ae60; color: white; border: none; border-radius: 50px; cursor: pointer; box-shadow: 0 0 30px #27ae60; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+  #main-layout { display: flex; width: 100%; height: 100%; filter: blur(5px); transition: filter 0.5s; }
+  #canvas-area { flex: 2; position: relative; background: #000; border-right: 2px solid #333; }
+  canvas { display: block; width: 100%; height: 100%; }
+  #controls-area { flex: 1; background: var(--panel-bg); padding: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 350px; }
+  .hud { position: absolute; top: 20px; left: 20px; background: rgba(0, 0, 0, 0.7); padding: 15px; border-radius: 8px; border-left: 5px solid var(--solid-color); pointer-events: none; }
+  .state-title { font-size: 1.8rem; font-weight: bold; margin-bottom: 5px; }
+  .state-desc { font-size: 0.9rem; color: #ccc; max-width: 300px; }
+  .manual-control { width: 100%; margin-top: 40px; }
+  input[type=range] { width: 100%; cursor: pointer; }
+  .sound-indicator { margin-top: 10px; font-size: 0.8rem; color: #888; display: flex; align-items: center; gap: 5px; }
+  .sound-bar { width: 3px; height: 10px; background: #27ae60; animation: equalizer 0.5s infinite; }
+  @keyframes equalizer { 0% { height: 5px; } 50% { height: 15px; } 100% { height: 5px; } }
+
+  /* --- CONTAINER --- */
+  .triangle-container { position: relative; width: 340px; height: 340px; margin: 30px 0; }
+  
+  .state-btn { position: absolute; width: 90px; height: 90px; border-radius: 50%; border: 4px solid rgba(255,255,255,0.2); color: white; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; transition: all 0.3s; z-index: 20; background-color: #333; box-shadow: 0 4px 8px rgba(0,0,0,0.5); }
+  .state-btn:hover { transform: scale(1.1); box-shadow: 0 0 25px white; z-index: 30; border-color: white; }
+  
+  #btn-gas { top: 0; left: 50%; transform: translateX(-50%); background: var(--gas-color); }
+  #btn-solid { bottom: 0; left: 0; background: var(--solid-color); }
+  #btn-liquid { bottom: 0; right: 0; background: var(--liquid-color); }
+
+  /* --- STYLE NÚT CHUYỂN ĐỔI --- */
+  .trans-btn { 
+    position: absolute; 
+    padding: 6px 0; 
+    background: #444; 
+    border: 1px solid rgba(255,255,255,0.2); 
+    border-radius: 4px; 
+    color: #eee; 
+    font-size: 0.7rem; 
+    cursor: pointer; 
+    transition: all 0.2s; 
+    z-index: 5; 
+    white-space: nowrap; 
+    box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    text-transform: uppercase;
+    font-weight: bold;
+    width: 100px; 
+    text-align: center;
+  }
+  .trans-btn:hover { background: #fff; color: #000; z-index: 15; border-color: white; }
+
+  /* --- LOGIC CĂN CHỈNH: GẦN VÀ SONG SONG --- */
+  /* Thay đổi chính: Giảm khoảng cách giữa các % left/right và top */
+
+  /* === CẠNH TRÁI (Rắn - Khí) === */
+  #trans-sublimation { 
+    top: 32%;      /* Hạ thấp xuống một chút */
+    left: 8%;      /* Đẩy vào trong */
+    transform: rotate(-60deg); 
+    background: linear-gradient(90deg, #444 0%, #8e44ad 100%);
+  }
+  #trans-deposition { 
+    top: 50%;      /* Đẩy lên cao hơn */
+    left: 15%;     /* Sát lại gần nút trên hơn */
+    transform: rotate(-60deg); 
+    background: linear-gradient(90deg, #2980b9 0%, #444 100%);
+  }
+
+  /* === CẠNH PHẢI (Lỏng - Khí) === */
+  #trans-vaporization { 
+    top: 32%; 
+    right: 8%;     /* Đẩy vào trong */
+    transform: rotate(60deg); 
+    background: linear-gradient(90deg, #c0392b 0%, #444 100%);
+  } 
+  #trans-condensation { 
+    top: 50%; 
+    right: 15%;    /* Sát lại gần nút trên hơn */
+    transform: rotate(60deg); 
+    background: linear-gradient(90deg, #444 0%, #8e44ad 100%);
+  }
+
+  /* === CẠNH ĐÁY (Rắn - Lỏng) === */
+  #trans-melting { 
+    bottom: 52px; /* Gần nhau hơn */
+    left: 50%; 
+    transform: translateX(-50%); 
+    width: 120px;
+    background: linear-gradient(90deg, #444 0%, #d35400 100%);
+  }
+  #trans-freezing { 
+    bottom: 18px; /* Gần nhau hơn */
+    left: 50%; 
+    transform: translateX(-50%); 
+    width: 120px;
+    background: linear-gradient(90deg, #2980b9 0%, #444 100%);
+  }
+</style>
+</head>
+<body>
+
+<div id="overlay">
+  <h1 style="margin-bottom: 20px;">MÔ PHỎNG VẬT LÝ</h1>
+  <p style="margin-bottom: 40px; color: #ccc;">Đeo tai nghe để có trải nghiệm tốt nhất</p>
+  <button id="start-btn" onclick="startSim()">BẮT ĐẦU & BẬT ÂM THANH 🔊</button>
+</div>
+
+<div id="main-layout">
+  <div id="canvas-area">
+    <canvas id="simCanvas"></canvas>
+    <div class="hud" id="hud">
+      <div class="state-title" id="hudTitle">RẮN (Solid)</div>
+      <div class="state-desc" id="hudDesc">Mạng tinh thể ổn định.</div>
+      <div style="margin-top: 10px; font-size: 0.8rem; color: #aaa;">Nhiệt độ: <span id="tempVal">0</span> K</div>
+      <div class="sound-indicator" id="soundIcon" style="opacity:0">
+          <span>🔊 Đang phát âm thanh mô phỏng:</span>
+          <span id="soundName" style="color: #fff; font-weight: bold;">Im lặng</span>
+          <div class="sound-bar"></div><div class="sound-bar" style="animation-delay:0.1s"></div><div class="sound-bar" style="animation-delay:0.2s"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="controls-area">
+    <h3 style="margin-bottom: 30px; letter-spacing: 1px;">SƠ ĐỒ CHUYỂN THỂ</h3>
+    <div class="triangle-container">
+      <div id="btn-gas" class="state-btn" onclick="setMode('gas')">KHÍ</div>
+      <div id="btn-solid" class="state-btn" onclick="setMode('solid')">RẮN</div>
+      <div id="btn-liquid" class="state-btn" onclick="setMode('liquid')">LỎNG</div>
+
+      <button id="trans-sublimation" class="trans-btn" onclick="animateTransition('sublimation')">⬆ Thăng hoa</button>
+      <button id="trans-deposition" class="trans-btn" onclick="animateTransition('deposition')">⬇ Ngưng kết</button>
+      
+      <button id="trans-vaporization" class="trans-btn" onclick="animateTransition('vaporization')">⬆ Hóa hơi</button>
+      <button id="trans-condensation" class="trans-btn" onclick="animateTransition('condensation')">⬇ Ngưng tụ</button>
+      
+      <button id="trans-melting" class="trans-btn" onclick="animateTransition('melting')">➡ Nóng chảy</button>
+      <button id="trans-freezing" class="trans-btn" onclick="animateTransition('freezing')">⬅ Đông đặc</button>
+    </div>
+
+    <div class="manual-control">
+      <label style="font-size:0.8rem; color:#888;">Nhiệt độ (0% = Lạnh tuyệt đối | 100% = Sôi)</label>
+      <input type="range" id="tempSlider" min="0" max="100" value="0">
+    </div>
+  </div>
+</div>
+
+<script>
+  // --- SCRIPT GIỮ NGUYÊN ---
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  let audioCtx;
+  let liquidGain, gasGain, solidGain;
+  function createNoiseBuffer() { const bufferSize = 2 * audioCtx.sampleRate; const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate); const output = buffer.getChannelData(0); for (let i = 0; i < bufferSize; i++) { output[i] = Math.random() * 2 - 1; } return buffer; }
+  function initAudio() { audioCtx = new AudioContext(); const noiseBuffer = createNoiseBuffer(); const liquidSource = audioCtx.createBufferSource(); liquidSource.buffer = noiseBuffer; liquidSource.loop = true; const liquidFilter = audioCtx.createBiquadFilter(); liquidFilter.type = 'lowpass'; liquidFilter.frequency.value = 400; liquidGain = audioCtx.createGain(); liquidGain.gain.value = 0; liquidSource.connect(liquidFilter); liquidFilter.connect(liquidGain); liquidGain.connect(audioCtx.destination); liquidSource.start(); const gasSource = audioCtx.createBufferSource(); gasSource.buffer = noiseBuffer; gasSource.loop = true; const gasFilter = audioCtx.createBiquadFilter(); gasFilter.type = 'bandpass'; gasFilter.frequency.value = 1000; gasFilter.Q.value = 1; gasGain = audioCtx.createGain(); gasGain.gain.value = 0; gasSource.connect(gasFilter); gasFilter.connect(gasGain); gasGain.connect(audioCtx.destination); gasSource.start(); }
+  function updateAudioVolume(state) { if(!audioCtx) return; const now = audioCtx.currentTime; const transitionTime = 1.5; if (state === 'gas') { gasGain.gain.setTargetAtTime(0.15, now, transitionTime); liquidGain.gain.setTargetAtTime(0, now, transitionTime); document.getElementById('soundName').innerText = "Gió rít (Khí)"; } else if (state === 'liquid') { gasGain.gain.setTargetAtTime(0, now, transitionTime); liquidGain.gain.setTargetAtTime(0.3, now, transitionTime); document.getElementById('soundName').innerText = "Suối reo (Lỏng)"; } else { gasGain.gain.setTargetAtTime(0, now, transitionTime); liquidGain.gain.setTargetAtTime(0, now, transitionTime); document.getElementById('soundName').innerText = "Im lặng (Rắn)"; } }
+  
+  const canvas = document.getElementById('simCanvas'); const ctx = canvas.getContext('2d');
+  function resize() { canvas.width = canvas.parentElement.offsetWidth; canvas.height = canvas.parentElement.offsetHeight; if(particles.length===0) initParticles(); }
+  window.addEventListener('resize', resize);
+  const particles = []; const numParticles = 240; const pRadius = 5; const GRID_SPACING = 22; let targetTemp = 0; let currentTemp = 0; let targetLatticeStr = 1.0; let currentLatticeStr = 1.0;
+  class Particle { constructor(x, y) { this.x = x; this.y = y; this.vx = 0; this.vy = 0; this.originX = x; this.originY = y; this.state = 'solid'; this.color = '#3498db'; } }
+  function initParticles() { particles.length = 0; const cols = 24; const rows = 10; const startX = (canvas.width - cols * GRID_SPACING) / 2 + GRID_SPACING/2; const startY = canvas.height - (rows * GRID_SPACING) - 50; for (let i = 0; i < numParticles; i++) { let c = i % cols; let r = Math.floor(i / cols); let tx = startX + c * GRID_SPACING; if (r % 2 !== 0) tx += GRID_SPACING/2; let ty = startY + r * GRID_SPACING; particles.push(new Particle(tx, ty)); } }
+  function update() { currentTemp += (targetTemp - currentTemp) * 0.05; currentLatticeStr += (targetLatticeStr - currentLatticeStr) * 0.05; document.getElementById('tempVal').innerText = Math.floor(currentTemp * 10); document.getElementById('tempSlider').value = targetTemp; if (currentLatticeStr < 0.2 && targetTemp >= 80) updateAudioVolume('gas'); else if (currentLatticeStr < 0.2) updateAudioVolume('liquid'); else updateAudioVolume('solid'); particles.forEach(p => { if (targetTemp >= 80) { if (p.state === 'liquid' && Math.random() < 0.02) { p.state = 'gas'; p.vy = -3; } if (p.state === 'solid' && Math.random() < 0.01) p.state = 'gas'; } else { if (p.state === 'gas' && Math.random() < 0.05) p.state = 'liquid'; if (targetTemp < 20 && p.state === 'liquid') p.state = 'solid'; } if (currentLatticeStr > 0.8) p.state = 'solid'; if (currentLatticeStr < 0.2 && targetTemp < 80 && p.state !== 'gas') p.state = 'liquid'; let vibration = currentTemp * 0.02; if (p.state === 'liquid') vibration = 0.05; p.vx += (Math.random() - 0.5) * vibration; p.vy += (Math.random() - 0.5) * vibration; if (p.state === 'solid') { if (currentLatticeStr > 0.1) { const dx = p.originX - p.x; const dy = p.originY - p.y; const k = 0.1 * currentLatticeStr; p.vx += dx * k; p.vy += dy * k; p.vx *= 0.75; p.vy *= 0.75; } p.color = '#3498db'; } else if (p.state === 'liquid') { p.vy += 0.5; const maxSpeed = 1.5; p.vx = Math.max(-maxSpeed, Math.min(maxSpeed, p.vx)); p.vy = Math.max(-maxSpeed, Math.min(maxSpeed, p.vy)); p.vx *= 0.98; p.vy *= 0.98; p.color = '#e74c3c'; } else if (p.state === 'gas') { p.vy -= 0.05; p.vx *= 0.995; p.vy *= 0.995; p.color = '#9b59b6'; } let enableRepulsion = true; if (p.state === 'solid' && currentLatticeStr > 0.5) enableRepulsion = false; if (enableRepulsion) { particles.forEach(other => { if (p === other) return; const dx = p.x - other.x; const dy = p.y - other.y; const distSq = dx*dx + dy*dy; if (distSq < pRadius * pRadius * 4) { const dist = Math.sqrt(distSq); const force = (10 - dist) * 0.4; const angle = Math.atan2(dy, dx); p.vx += Math.cos(angle) * force; p.vy += Math.sin(angle) * force; if (p.state === 'liquid') p.vx += (Math.random()-0.5)*0.1; } }); } p.x += p.vx; p.y += p.vy; const damping = 0.5; if (p.x < pRadius) { p.x = pRadius; p.vx *= -damping; } if (p.x > canvas.width - pRadius) { p.x = canvas.width - pRadius; p.vx *= -damping; } if (p.y > canvas.height - pRadius) { p.y = canvas.height - pRadius; p.vy *= -damping; p.vx *= 0.9; } if (p.y < pRadius) { p.y = pRadius; p.vy *= -damping; } }); }
+  function draw() { ctx.fillStyle = 'rgba(0, 0, 0, 0.3)'; ctx.fillRect(0, 0, canvas.width, canvas.height); if (currentLatticeStr > 0.2) { ctx.strokeStyle = `rgba(255,255,255, ${currentLatticeStr * 0.2})`; ctx.beginPath(); for (let i = 0; i < particles.length; i++) { let p = particles[i]; if (p.state !== 'solid') continue; for (let j = i + 1; j < particles.length; j++) { let other = particles[j]; if (other.state !== 'solid') continue; const dx = p.x - other.x; const dy = p.y - other.y; if (Math.abs(dx) < 35 && Math.abs(dy) < 35) { ctx.moveTo(p.x, p.y); ctx.lineTo(other.x, other.y); } } } ctx.stroke(); } particles.forEach(p => { ctx.beginPath(); ctx.arc(p.x, p.y, pRadius, 0, Math.PI*2); ctx.fillStyle = p.color; if (p.state === 'gas') { ctx.shadowBlur = 10; ctx.shadowColor = p.color; } else { ctx.shadowBlur = 0; } ctx.fill(); ctx.shadowBlur = 0; }); update(); requestAnimationFrame(draw); }
+  function startSim() { document.getElementById('overlay').style.opacity = 0; setTimeout(() => { document.getElementById('overlay').style.display = 'none'; }, 500); document.getElementById('main-layout').style.filter = 'none'; document.getElementById('soundIcon').style.opacity = 1; initAudio(); resize(); initParticles(); draw(); }
+  const hudTitle = document.getElementById('hudTitle'); const hudDesc = document.getElementById('hudDesc'); const hud = document.getElementById('hud');
+  const MODES = { 'solid': { temp: 0, lattice: 1.0, title: "RẮN", desc: "Trật tự, dao động nhẹ", color: "#3498db" }, 'liquid': { temp: 50, lattice: 0.0, title: "LỎNG", desc: "Trượt lên nhau, không bay hơi", color: "#e74c3c" }, 'gas': { temp: 100, lattice: 0.0, title: "KHÍ", desc: "Bay tự do", color: "#9b59b6" } };
+  function setMode(mode) { const m = MODES[mode]; targetTemp = m.temp; targetLatticeStr = m.lattice; updateUI(m.title, m.desc, m.color); }
+  function updateUI(title, desc, color) { hudTitle.innerText = title; hudDesc.innerText = desc; hudTitle.style.color = color; hud.style.borderLeftColor = color; }
+  function animateTransition(type) { switch(type) { case 'melting': targetTemp=50; targetLatticeStr=0; updateUI("NÓNG CHẢY", "Rắn -> Lỏng", "#f1c40f"); break; case 'freezing': targetTemp=0; targetLatticeStr=1; updateUI("ĐÔNG ĐẶC", "Lỏng -> Rắn", "#3498db"); break; case 'vaporization': targetTemp=100; targetLatticeStr=0; updateUI("HÓA HƠI", "Sôi từ từ...", "#9b59b6"); break; case 'condensation': targetTemp=50; targetLatticeStr=0; updateUI("NGƯNG TỤ", "Khí -> Lỏng", "#e74c3c"); break; case 'sublimation': targetTemp=100; targetLatticeStr=0; updateUI("THĂNG HOA", "Bay hơi ngay", "#e056fd"); break; case 'deposition': targetTemp=0; targetLatticeStr=1; updateUI("NGƯNG KẾT", "Khí -> Rắn", "#badc58"); break; } }
+  document.getElementById('tempSlider').addEventListener('input', (e) => { targetTemp = parseInt(e.target.value); if(targetTemp < 30) targetLatticeStr = 1; else targetLatticeStr = 0; });
+</script>
+</body>
+</html>
